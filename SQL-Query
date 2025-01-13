@@ -1,0 +1,166 @@
+
+select * from walmart_sales;
+ 
+# for changing date datatype
+UPDATE walmart_sales	
+SET Date = STR_TO_DATE(Date, '%d-%m-%Y');
+
+alter table walmart_sales
+modify Date date;
+
+desc walmart_sales;
+
+# task-1
+# for this task i used a CTE  to break down the query into 3 part 1st part is to calculate total sale, next is to calculate growth of sales and last part is to find the avg. of growth
+with Total_sale as
+(
+ select branch, month(date) as months, 
+ sum(total) as sales from walmart_sales
+ group by Branch, months
+ order by branch
+),
+growth as
+(
+ select branch, months, sales,
+ lag (sales) over
+ (partition by branch order by months) as pre_sales,
+ (sales - lag (sales) over (partition by branch order by months) ) *100 / lag (sales) over (partition by branch order by months) as Growth
+ from total_sale
+)
+select branch, round (avg(growth), 2) as avg_growth from growth
+group by branch
+limit 1;
+
+
+# task-2
+with sales_cost as
+(
+select branch, Product_line, sum(total) as sales, sum(cogs) as cost from walmart_sales
+group by branch, Product_line
+order by branch
+),
+profits as
+(
+select branch, product_line, 
+rank() over 
+(partition by branch order by sales desc) as ranks,
+(sales - cost) as profit
+from sales_cost
+)
+select branch, product_line, round(profit, 2) as Profit from profits
+where ranks = 1;
+
+
+# task-3
+select min(total) from walmart_sales;
+select max(total) from walmart_sales;
+
+with  Total_purchases as
+(
+select Customer_ID, 
+round(sum(total), 2) as amount from walmart_sales
+group by Customer_ID
+order by Customer_ID
+)
+select customer_id, amount,
+case 
+when amount < 20000 then 'low'
+when amount < 22000 then 'Medium'
+else 'High'
+end as 'Customer_segments'
+from total_purchases;
+
+
+#task-4
+# as per my understanding anomalies means if any sale amount is twice more than the average sales price then its anomaly
+# i classify the anomaly and normal data using case functions
+WITH aveage_sales AS
+( 
+SELECT Product_Line,
+ROUND(AVG(Total), 2) AS avg_sales
+FROM walmart_sales
+GROUP BY Product_Line
+)
+SELECT w.Invoice_ID, w.Product_Line,
+w.Total AS sales_amount, a.avg_sales,
+CASE 
+WHEN (w.Total - a.avg_sales) > 2 * a.AVG_SALES THEN 'Anomaly'
+ELSE 'Normal'
+END AS status
+FROM walmart_sales w
+JOIN aveage_sales as a
+ON w.Product_Line = a.Product_Line
+WHERE (w.Total - a.avg_sales) > 2 * a.AVG_SALES ;
+
+
+# task- 5
+with total_payments as
+(
+select city, payment, count(payment) as no_payments from walmart_sales
+group by city, payment
+order by city
+),
+popular_payments as
+(
+select city, payment, no_payments,
+rank() over
+(partition by city order by payment) as ranks 
+from total_payments
+)
+select city, payment, no_payments from popular_payments
+where ranks = 1;
+
+
+#task-6
+select gender, month(date) as months, ROUND(sum(total), 2) as sales from walmart_sales
+group by gender, months
+order by gender;
+
+
+#task-7
+with total_sales as
+(
+select customer_type, product_line, sum(total) as sales from walmart_sales
+group by Customer_type, Product_line
+order by Customer_type
+),
+Customertype_rank as
+(
+select *,
+rank() over
+(partition by customer_type order by sales desc) as ranks
+from total_sales
+)
+select customer_type, product_line, round (sales) as total_sales from Customertype_rank
+where ranks = 1;
+
+
+#task-8 
+with prev_sales as
+(
+select customer_id, date, 
+lag (date) over
+(partition by customer_id order by date) as Prev_saledate
+from walmart_sales
+),
+sales_difference as
+(
+select customer_id, date, prev_saledate, 
+datediff(date , prev_saledate) as differnce
+from prev_sales
+)
+select distinct customer_id from sales_difference
+where differnce <= 30 ;
+
+
+#task-9
+select customer_id, ROUND(sum(total), 2) as amount from walmart_sales
+group by Customer_ID
+order by amount desc
+limit 5;
+
+
+#task-10	
+select dayname(date) as day_of_week, ROUND(sum(total), 2) as total_sale from walmart_sales
+group by day_of_week
+order by total_sale desc;
